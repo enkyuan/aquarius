@@ -31,6 +31,7 @@ class Bot:
         self.rng = random.Random(hello["seed"])
         self.damage = {}
         self.last_bearing = None
+        self.last_kill = -math.inf
         self.retreating = False
         self.cover = None
         self.next_cover = 0
@@ -51,6 +52,8 @@ class Bot:
                 self.damage.setdefault(event["by"], []).append((now, event["amount"]))
                 if event["bearing"] is not None:
                     self.last_bearing = now, event["bearing"]
+            elif event["type"] == "kill":
+                self.last_kill = now
 
     def plan_explore(self, obs):
         me, now = obs["self"], obs["t"]
@@ -229,7 +232,14 @@ class Bot:
                 and primary.exposed
                 and (primary.pressure >= 1.65 or primary.meters < 87)
             ):
-                if (
+                salvage = None
+                if not crowded and not enemy_charge and health > 0.55:
+                    salvage = self.resources.salvage(
+                        obs, active, now - self.last_kill < 4
+                    )
+                if salvage:
+                    goal, farm = salvage, None
+                elif (
                     resource
                     and priority_pickup
                     and not take

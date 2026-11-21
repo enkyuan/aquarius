@@ -213,6 +213,35 @@ class FireControl:
                     obs["t"] + self.config["weapons"]["lightning"]["short_s"]
                 )
 
+    @staticmethod
+    def laser_damage(weapon, actor):
+        stats = weapon["stats"]
+        charge = min(1.0, weapon.get("charge", 0) / stats["charge"])
+        fraction = stats["min_frac"] + (1 - stats["min_frac"]) * charge
+        cookoff = stats["cookoff"] if "mortar" in actor.get("weapons", ()) else 0
+        return stats["damage"] * fraction * (1 + cookoff)
+
+    def aim_priority(self, weapon, actor):
+        kind, stats = weapon["kind"], weapon["stats"]
+        ready = weapon["cooldown"] <= self.horizon + 1e-5
+        if kind == "gun":
+            if weapon.get("ammo", 0) <= 0 or weapon.get("reload", 0) > self.horizon:
+                return -18
+            return 10 if ready else 0
+        if kind == "lightning":
+            if not ready:
+                return -18
+            return 9 if "laser" in actor.get("weapons", ()) else 7
+        charge = weapon.get("charge", 0)
+        if charge >= stats["min_charge"] and (
+            charge + 1e-5 >= stats["charge"]
+            or self.laser_damage(weapon, actor) >= actor.get("hp", math.inf)
+        ):
+            return 24
+        if not charge and not ready:
+            return -25
+        return 3
+
     def decide(self, obs, threats, farm, fallback, retreat, quiet, deadline):
         me = obs["self"]
         action = {"aim": list(fallback), "fire": [False, False]}
@@ -228,8 +257,10 @@ class FireControl:
             and gun.get("reload", 0) <= 0
             and gun.get("ammo", 0) < gun["stats"]["mag"]
         ):
-            action["reload"] = (quiet or retreat or gun["ammo"] == 0) and (
-                gun["ammo"] <= 6 or not threats
+            exposed = any(c.exposed and c.actor["kind"] == "mech" for c in threats)
+            action["reload"] = gun["ammo"] == 0 or (
+                (quiet or retreat or (not exposed and not farm))
+                and gun["ammo"] <= max(4, gun["stats"]["mag"] * 0.55)
             )
         if quiet or perf_counter() >= deadline:
             return action
@@ -251,6 +282,10 @@ class FireControl:
                 break
             for slot, weapon in slots:
                 kind = weapon["kind"]
+                if retreat and kind == "gun":
+                    continue
+                if retreat and kind == "lightning" and not actor.get("charging"):
+                    continue
                 if kind == "laser" and (
                     obs["t"] < self.short_until or (retreat and not charging)
                 ):
@@ -273,22 +308,15 @@ class FireControl:
                     if actor["kind"] == "mech"
                     else 0
                 )
-                value -= 0.045 * shot.meters + 9 * turn + 5 * min(2, weapon["cooldown"])
+                priority = self.aim_priority(weapon, actor)
+                value += priority
+                value -= 0.045 * shot.meters + 9 * turn
                 damage = weapon["stats"]["damage"]
                 if kind == "laser":
-                    value += 6 if not retreat else 0
+                    damage = self.laser_damage(weapon, actor)
                     if "mortar" in actor.get("weapons", ()):
-                        damage *= 1 + weapon["stats"]["cookoff"]
-                        value += 5
-                    if weapon.get("charge", 0):
-                        value += 11
-                elif kind == "lightning":
-                    value += 8 if "laser" in actor.get("weapons", ()) else 4
-                elif (
-                    weapon.get("ammo", 0) <= 0 or weapon.get("reload", 0) > self.horizon
-                ):
-                    value -= 12
-                if damage >= finish:
+                        value += 3
+                if damage >= finish and priority > 0:
                     value += 10
                 options.append((value, slot, weapon, actor, shot))
         if not options:
@@ -304,14 +332,10 @@ class FireControl:
             if kind == "laser":
                 charge, stats = weapon.get("charge", 0), weapon["stats"]
                 if charge:
-                    fraction = stats["min_frac"] + (1 - stats["min_frac"]) * min(
-                        1.0, charge / stats["charge"]
-                    )
-                    damage = stats["damage"] * fraction
-                    if "mortar" in actor.get("weapons", ()):
-                        damage *= 1 + stats["cookoff"]
                     accurate = aligned(me, me["aim"], main.aim, shot, weapon, self.dt)
-                    finish = actor.get("hp", math.inf) <= damage
+                    finish = actor.get("hp", math.inf) <= self.laser_damage(
+                        weapon, actor
+                    )
                     full = charge + 1e-5 >= stats["charge"]
                     fire = not (
                         retreat
@@ -327,7 +351,7 @@ class FireControl:
                     safe_to_charge = not retreat and not (
                         shot.meters < 52 and "lightning" in actor.get("weapons", ())
                     )
-                    fire = ready and safe_to_charge and turns_in(me, main.aim) < 0.32
+                    fire = ready and safe_to_charge and turns_in(me, shot.aim) < 0.32
                 action["fire"][slot] = fire
             else:
                 loaded = kind != "gun" or (

@@ -13,7 +13,7 @@ from pathlib import Path
 from time import perf_counter
 
 from bot.arena import Arena, Prism
-from bot.combat import FireControl, angles, contacts, intercept, muzzle
+from bot.combat import Contact, FireControl, angles, contacts, intercept, muzzle
 from bot.movement import Router, circle_at, distance, projectile_risk, steer
 from bot.policy import Bot
 from bot.tactics import Resources
@@ -91,6 +91,52 @@ def check_combat(obs, config, arena):
     assert projectile_risk((0, 6, 0), (0, 7, 0), 0, 0.12, [(bullet, 0)], 2.5, 9) == 0
 
 
+def check_weapon_schedule(obs, config):
+    class OpenLane:
+        def shot_clear(self, a, b):
+            return True
+
+    obs = deepcopy(obs)
+    me = obs["self"]
+    me["pos"], me["vel"], me["aim"] = [0, 0, 0], [0, 0, 0], [0, 0]
+    target = {
+        "id": 6,
+        "kind": "mech",
+        "pos": [125, 0, 0],
+        "vel": [0, 11.7, 0],
+        "aim": [math.pi, 0],
+        "hp": 1400,
+        "max_hp": 1400,
+        "weapons": ["gun", "laser"],
+    }
+    laser = {
+        "kind": "laser",
+        "cooldown": 0.6,
+        "charge": 0,
+        "stats": config["weapons"]["laser"],
+    }
+    me["weapons"][1] = laser
+    control = FireControl(config, OpenLane())
+    threat = Contact(target, 125, 3, True)
+
+    def choose(retreat=False):
+        return control.decide(
+            obs, [threat], None, me["aim"], retreat, False, perf_counter() + 0.2
+        )
+
+    assert choose()["fire"] == [True, False]
+    laser.update(cooldown=0, charge=0.35)
+    assert choose()["fire"] == [True, True]
+    laser["charge"] = laser["stats"]["charge"]
+    assert choose()["fire"] == [False, False]
+    laser["charge"] = 0
+    assert choose(retreat=True)["fire"] == [False, False]
+    me["weapons"][0]["ammo"] = 3
+    assert control.decide(obs, [], None, me["aim"], False, False, perf_counter() + 0.2)[
+        "reload"
+    ]
+
+
 def check_resources(obs, config, arena):
     obs = deepcopy(obs)
     resources = Resources(config, arena)
@@ -118,6 +164,8 @@ def check_resources(obs, config, arena):
     ]
     resources.update(obs)
     assert resources.objective(obs, [], False) == ((x, y), None)
+    obs["cubes"] = [{"id": 5000, "pos": [x + 1, y, z]}]
+    assert resources.salvage(obs, [], True) == (x + 1, y)
     obs["offer"] = {
         "id": 1,
         "expires": 5,
@@ -216,6 +264,7 @@ def main():
     arena = Arena(hello["map"]["dir"], config["mech"])
     check_geometry()
     check_combat(obs, config, arena)
+    check_weapon_schedule(obs, config)
     check_resources(obs, config, arena)
     assert circle_at(obs["zone"], 20, 70)[2] == 524
     ticks = ground_loop(obs, arena)

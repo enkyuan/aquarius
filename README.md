@@ -28,6 +28,6 @@ The official checker measures protocol compliance against a fixed recording. The
 - `bot/combat.py` assesses threats and handles gun lead, laser charge and release, and lightning range.
 - `bot/tactics.py` handles loot, supply drops, loadouts, and upgrade offers.
 
-The first version uses ground routes and prioritizes gun plus laser. It also supports swapping in lightning for close-range fights. Mortar firing and rooftop routes are deferred.
+The bot uses ground routes and prioritizes gun plus laser. The gun handles firing opportunities during laser charge and cooldown, and the laser takes priority when ready to release. Nearby cubes are a priority after a kill. Retreating suspends gunfire to give repairs a chance to start. Its alternate loadout uses lightning for close-range fights.
 
 `bot/mechfight.py` is the Python protocol wrapper supplied by the official [Mech Royale starter kit](https://www.joinbuilders.org/buildathon/tracks/builders).

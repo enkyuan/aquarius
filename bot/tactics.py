@@ -92,6 +92,37 @@ class Resources:
             return {"take": object_id, "drop": slot}
         return {"take": object_id}
 
+    def salvage(self, obs, threats, after_kill):
+        """Collect nearby loose cubes when the current fight leaves room."""
+        me, now = obs["self"], obs["t"]
+        pos, stats = me["pos"], me["stats"]
+        reach = self.config["cubes"].get("pickup_radius", 3.5)
+        limit = 26 if after_kill else 13
+        options = []
+        for cube in obs["cubes"]:
+            point = cube["pos"]
+            meters = distance(pos, point)
+            if (
+                meters > limit
+                or abs(pos[2] - point[2]) > 3.8
+                or zone_margin(point, obs["zone"], now, now + 3) < 1
+                or not self.arena.walk_clear(pos, point, stats)
+            ):
+                continue
+            if any(
+                contact.exposed
+                and distance(point, contact.actor["pos"]) < min(24, contact.meters - 6)
+                for contact in threats
+            ):
+                continue
+            cluster = sum(
+                distance(point, other["pos"]) <= reach for other in obs["cubes"]
+            )
+            if me["cubes"] >= 10 and (not after_kill or cluster < 3) and meters > 7:
+                continue
+            options.append((min(6, cluster) * 4 - meters * 0.35, point))
+        return tuple(max(options)[1][:2]) if options else None
+
     def objective(self, obs, threats, close_laser):
         me, now, zone = obs["self"], obs["t"], obs["zone"]
         pos = me["pos"]
