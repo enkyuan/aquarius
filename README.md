@@ -20,6 +20,15 @@ The official checker measures protocol compliance against a fixed recording. The
 
 `assets/nav-grid.gz` caches ground clearance for the kit map. Regenerate it after changes to the map or grid with `python3 -m dev.bake_nav --kit "$KIT"`. The bot checks it against the mounted map and recomputes the grid if the fingerprint changes.
 
+## Compare combat changes locally
+
+```sh
+python3 -m dev.duels --kit ../mechfight-kit --against 4d43e80 --seeds 8
+python3 -m dev.duels --kit ../mechfight-kit --against 4d43e80 --seeds 8 --seed-offset 100
+```
+
+Each revision plays the same scripted opponents from four sets of recorded encounter positions. The runner advances movement and damage in response to bot commands and reports duel wins, HP, hits, and survival time. It approximates motion and weapon timing and covers gun and laser duels with a static zone and full opponent visibility. Official placement depends on the server, house squad, loot, and shrinking circle.
+
 ## Policy
 
 - `bot/policy.py` selects the current objective and combines it with a movement and firing action.
@@ -28,6 +37,6 @@ The official checker measures protocol compliance against a fixed recording. The
 - `bot/combat.py` assesses threats and handles gun lead, laser charge and release, and lightning range.
 - `bot/tactics.py` handles loot, supply drops, loadouts, and upgrade offers.
 
-The bot uses ground routes and prioritizes gun plus laser. The gun handles firing opportunities during laser charge and cooldown, and the laser takes priority when ready to release. Nearby cubes are a priority after a kill. Retreating suspends gunfire to give repairs a chance to start. Its alternate loadout uses lightning for close-range fights.
+The bot uses ground routes and prioritizes gun plus laser. The gun handles firing opportunities during laser charge and cooldown, and the laser takes priority when ready to release. Nearby cubes are a priority after a kill. The bot can return fire while escaping an exposed lane and holds fire once it settles into recovery. Its alternate loadout uses lightning for close-range fights.
 
 `bot/mechfight.py` is the Python protocol wrapper supplied by the official [Mech Royale starter kit](https://www.joinbuilders.org/buildathon/tracks/builders).

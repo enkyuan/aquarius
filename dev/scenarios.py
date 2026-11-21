@@ -119,9 +119,9 @@ def check_weapon_schedule(obs, config):
     control = FireControl(config, OpenLane())
     threat = Contact(target, 125, 3, True)
 
-    def choose(retreat=False):
+    def choose(retreat=False, quiet=False):
         return control.decide(
-            obs, [threat], None, me["aim"], retreat, False, perf_counter() + 0.2
+            obs, [threat], None, me["aim"], retreat, quiet, perf_counter() + 0.2
         )
 
     assert choose()["fire"] == [True, False]
@@ -130,7 +130,8 @@ def check_weapon_schedule(obs, config):
     laser["charge"] = laser["stats"]["charge"]
     assert choose()["fire"] == [False, False]
     laser["charge"] = 0
-    assert choose(retreat=True)["fire"] == [False, False]
+    assert choose(retreat=True)["fire"] == [True, False]
+    assert choose(retreat=True, quiet=True)["fire"] == [False, False]
     me["weapons"][0]["ammo"] = 3
     assert control.decide(obs, [], None, me["aim"], False, False, perf_counter() + 0.2)[
         "reload"

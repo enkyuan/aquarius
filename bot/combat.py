@@ -282,8 +282,6 @@ class FireControl:
                 break
             for slot, weapon in slots:
                 kind = weapon["kind"]
-                if retreat and kind == "gun":
-                    continue
                 if retreat and kind == "lightning" and not actor.get("charging"):
                     continue
                 if kind == "laser" and (
