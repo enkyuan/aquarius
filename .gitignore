@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.gstack/
+.venv/
+.ruff_cache/
+dev/replays/

@@ -1,0 +1,7 @@
+*
+!bot/
+!bot/*.py
+!Dockerfile
+**/__pycache__/
+!assets/
+!assets/nav-grid.gz
