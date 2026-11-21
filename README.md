@@ -14,6 +14,7 @@ python3 "$KIT/check/check.py" --map-dir /arena -- \
   --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 \
   --mount "type=bind,src=$KIT/arena,dst=/arena,readonly" aquarius-bot
 python3 -m dev.scenarios --kit "$KIT"
+python3 -m dev.openings --kit "$KIT" --sweep
 ```
 
 The official checker measures protocol compliance against a fixed recording. The scenario script checks targeted behaviors and approximates ground movement to exercise a route. Placement is measured by the official practice scorer.
@@ -36,6 +37,9 @@ Each revision plays the same scripted opponents from four sets of recorded encou
 - `bot/movement.py` plans routes in bounded slices and steers around nearby obstacles, zone damage, and projectiles.
 - `bot/combat.py` assesses threats and handles gun lead, laser charge and release, and lightning range.
 - `bot/tactics.py` handles loot, supply drops, loadouts, and upgrade offers.
+- `bot/opening.py` checks whether to sprint toward the selected first laser or lightning pickup. It checks the direct ground lane, the closing zone, energy recovery by pickup, and a reachable full-height wall after braking. Each observation can interrupt the approach. The wall provides directional shelter. The bot defers to its normal policy for tracked actors, projectiles, and recent combat or movement sounds.
+
+The opening test advances ground motion and energy on the kit map until the bot issues an in-range take. Its quiet lanes keep the item visible and uncontested. The sweep tests six approach angles per recorded ground weapon and reports the results for traversable lanes.
 
 The bot uses ground routes and prioritizes gun plus laser. The gun handles firing opportunities during laser charge and cooldown, and the laser takes priority when ready to release. Nearby cubes are a priority after a kill. The bot can return fire while escaping an exposed lane and holds fire once it settles into recovery. Its alternate loadout uses lightning for close-range fights.
 

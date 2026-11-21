@@ -15,6 +15,7 @@ from .movement import (
     steer,
     zone_margin,
 )
+from .opening import Opening
 from .tactics import Resources, pickup_slot
 
 
@@ -27,6 +28,7 @@ class Bot:
         self.arena = Arena(hello["map"]["dir"], stats)
         self.router = Router(self.arena, stats["radius"], stats["height"])
         self.fire_control = FireControl(self.config, self.arena)
+        self.opening = Opening(self.arena, self.config)
         self.resources = Resources(self.config, self.arena)
         self.rng = random.Random(hello["seed"])
         self.damage = {}
@@ -118,6 +120,7 @@ class Bot:
         started = perf_counter()
         me, now, zone = obs["self"], obs["t"], obs["zone"]
         pos, stats = me["pos"], me["stats"]
+        self.opening.observe(obs)
         self.update_damage(obs)
         self.fire_control.update(obs)
         self.resources.update(obs)
@@ -211,7 +214,7 @@ class Bot:
                     )
             retreat_goal = self.cover
         take = self.resources.take(obs, close_laser)
-        goal = None
+        goal = resource = None
         if unsafe:
             goal = rotate
         elif retreat_goal:
@@ -255,7 +258,24 @@ class Bot:
             goal = self.plan_explore(obs)
         if rotate and self.retreating and zone_margin(goal, zone, now, now + 3) < -2:
             goal = rotate
-        waypoint = self.router.target(pos, goal, stats, started + 0.0115)
+        opening_move = None
+        if (
+            resource is not None
+            and goal is resource
+            and not (self.retreating or rotate or take)
+        ):
+            item = next(
+                (p for p in obs["pickups"] if p["id"] == self.resources.last_goal), None
+            )
+            if item:
+                opening_move = self.opening.sprint(obs, item, started + 0.008)
+        if opening_move:
+            # The sprint leaves any cached grid path. Replan from our actual
+            # position when the direct approach ends or a threat interrupts it.
+            self.router.key = None
+            waypoint = goal
+        else:
+            waypoint = self.router.target(pos, goal, stats, started + 0.0115)
         fallback = me["aim"]
         if (primary and (self.retreating or primary.meters < 140)) or (
             self.retreating and last_hit
@@ -288,7 +308,8 @@ class Bot:
         action = {"tick": obs["tick"], **take, **self.resources.upgrade(obs)}
         steer_threats = sorted(active, key=lambda c: not c.actor.get("charging", False))
         action.update(
-            steer(
+            opening_move
+            or steer(
                 self.arena,
                 obs,
                 waypoint,
